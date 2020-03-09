@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<!-- saved from url=(0014)about:internet -->
+<html lang="en">
+<head>
+<title>Test Editor</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=11" />
+<meta http-equiv="Pragma" content="no-cache">
+<link rel="shortcut icon" href="favicon.ico">
+<link rel="stylesheet" href="./css/lab.css">
+
+<script src="./src/externs_lab.js"></script>
+<script src="./src/libs/tween.js"></script>
+<script src="./src/libs/uil.js"></script>
+<script src="./src/libs/codemirror.js"></script>
+<script src="./src/libs/codemirrorAdd/glsl.js"></script>
+<script src="./src/libs/codemirrorAdd/javascript.js"></script>
+<script src="./src/libs/codemirrorAdd/active-line.js"></script>
+<script src="./src/libs/codemirrorAdd/matchbrackets.js"></script>
+<script src="./src/libs/codemirrorAdd/match-highlighter.js"></script>
+<script src="./src/libs/esprima.js"></script>
+<script src="./src/libs/saveAs.js"></script>
+<script src="./src/gui.js"></script>
+<script src="./src/editor.js"></script>
+
+</head>
+
+<body>
+
+<script>
+var demos = [ 
+    'basic', 'terrain', 'terrainPlus', 'supermaket', 'collision', 'ragdoll',
+];
+
+demos.sort();
+
+var view, demo, physic;
+var demoName = 'basic';
+var currentMode = '';
+
+
+// fake view
+
+function View (){
+
+    this.x = 0;
+    this.y = 0;
+    this.content = document.createElement( 'div' );
+    this.content.style.cssText = 'position:absolute; left:0; top:0;';
+    document.body.appendChild( this.content );
+
+    window.addEventListener( 'resize', this.resize.bind(this), false );
+
+    this.render();
+
+};
+
+View.prototype = {
+
+    setLeft: function ( x, y ) { 
+
+        this.x = x;
+        this.y = y;
+        this.resize();
+
+    },
+
+    resize: function ( e ){
+
+        var w = window.innerWidth - this.x - this.y;
+        var h = window.innerHeight;
+        this.content.style.cssText = 'position:absolute; left:'+this.x+'px; top:0px; width:'+w+'px; height:'+h+'px;';
+        editor.resizeMenu( w );
+
+    },
+
+    render: function ( t ){
+
+        var _this = this;
+        requestAnimationFrame(  function(s){ _this.render(s); } );
+
+        TWEEN.update(); // tweener
+
+    },
+
+    needFocus: function () {
+
+    }
+
+};
+
+var view = new View();
+
+var isfirst = true;
+
+var option = {
+
+    hide:false,
+    show:false,
+
+}
+
+var isWithCode = true;
+
+editor.init( launch, isWithCode, '#FF8800', 'lab' );
+editor.addExtraOption( mode );
+editor.load('src/intro.js');
+
+
+function launch ( name, full ) {
+
+    if(!isfirst) return;
+
+    console.log('launch')
+
+    intro.init('Lab interface by 3TH', view.content )
+
+    // add option setting
+    ui ({
+
+        base:option,
+        function: applyOption,
+
+        hide: { type:'button', p:0, h:30, radius:10, value:false },
+        show: { type:'button', p:0, h:30, radius:10, value:'show' },
+
+    });
+
+    isfirst = false;
+
+}
+
+function mode ( mode ) {
+
+    console.log('mode')
+
+}
+
+function ui ( option ) { editor.setOption( option ); };
+
+function applyOption () { 
+
+    if( option.hide ) intro.clear();
+    if( option.show ) intro.init('Lab interface by 3TH', view.content );
+
+
+};
+
+</script>
+
+</body>
+</html>

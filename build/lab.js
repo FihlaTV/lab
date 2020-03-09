@@ -1071,7 +1071,7 @@ TWEEN.version = version;
 
 	}
 
-	var REVISION = '111dev';
+	var REVISION = '112dev';
 	var MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
 	var TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
 	var CullFaceNone = 0;
@@ -10954,7 +10954,8 @@ TWEEN.version = version;
 
 			if ( position !== undefined ) {
 
-				matrix.applyToBufferAttribute( position );
+				position.applyMatrix4( matrix );
+
 				position.needsUpdate = true;
 
 			}
@@ -16396,11 +16397,11 @@ TWEEN.version = version;
 					};
 
 					// enable code injection for non-built-in material
-					Object.defineProperty( boxMesh.material, 'map', {
+					Object.defineProperty( boxMesh.material, 'envMap', {
 
 						get: function () {
 
-							return this.envMap.value;
+							return this.uniforms.envMap.value;
 
 						}
 
@@ -16411,7 +16412,9 @@ TWEEN.version = version;
 				}
 
 				var texture = background.isWebGLRenderTargetCube ? background.texture : background;
-				boxMesh.material.envMap = texture;
+
+				boxMesh.material.uniforms.envMap.value = texture;
+				boxMesh.material.uniforms.flipEnvMap.value = texture.isCubeTexture ? - 1 : 1;
 
 				if ( currentBackground !== background ||
 				     currentBackgroundVersion !== texture.version ) {
@@ -19219,7 +19222,6 @@ TWEEN.version = version;
 			} else if ( programLog !== '' ) {
 
 				console.warn( 'THREE.WebGLProgram: gl.getProgramInfoLog()', programLog );
-				console.log(fragmentGlsl)
 
 			} else if ( vertexLog === '' || fragmentLog === '' ) {
 
@@ -19403,7 +19405,7 @@ TWEEN.version = version;
 
 		}
 
-		function getTextureEncodingFromMap( map, gammaOverrideLinear ) {
+		function getTextureEncodingFromMap( map ) {
 
 			var encoding;
 
@@ -19419,13 +19421,6 @@ TWEEN.version = version;
 
 				console.warn( "THREE.WebGLPrograms.getTextureEncodingFromMap: don't use render targets as textures. Use their .texture property instead." );
 				encoding = map.texture.encoding;
-
-			}
-
-			// add backwards compatibility for WebGLRenderer.gammaInput/gammaOutput parameter, should probably be removed at some point.
-			if ( encoding === LinearEncoding && gammaOverrideLinear ) {
-
-				encoding = GammaEncoding;
 
 			}
 
@@ -19469,7 +19464,7 @@ TWEEN.version = version;
 
 				supportsVertexTextures: vertexTextures,
 				numMultiviewViews: numMultiviewViews,
-				outputEncoding: getTextureEncodingFromMap( ( ! currentRenderTarget ) ? null : currentRenderTarget.texture, renderer.gammaOutput ),
+				outputEncoding: ( currentRenderTarget !== null ) ? getTextureEncodingFromMap( currentRenderTarget.texture ) : renderer.outputEncoding,
 				map: !! material.map,
 				mapEncoding: getTextureEncodingFromMap( material.map ),
 				matcap: !! material.matcap,
@@ -19592,7 +19587,7 @@ TWEEN.version = version;
 
 			array.push( material.onBeforeCompile.toString() );
 
-			array.push( renderer.gammaOutput );
+			array.push( renderer.outputEncoding );
 
 			array.push( renderer.gammaFactor );
 
@@ -24125,7 +24120,7 @@ TWEEN.version = version;
 
 			}
 
-			if ( onAnimationFrameCallback ) { onAnimationFrameCallback( time ); }
+			if ( onAnimationFrameCallback ) { onAnimationFrameCallback( time, frame ); }
 
 		}
 
@@ -24139,35 +24134,6 @@ TWEEN.version = version;
 		};
 
 		this.dispose = function () {};
-
-		// DEPRECATED
-
-		this.getStandingMatrix = function () {
-
-			console.warn( 'THREE.WebXRManager: getStandingMatrix() is no longer needed.' );
-			return new Matrix4();
-
-		};
-
-		this.getDevice = function () {
-
-			console.warn( 'THREE.WebXRManager: getDevice() has been deprecated.' );
-
-		};
-
-		this.setDevice = function () {
-
-			console.warn( 'THREE.WebXRManager: setDevice() has been deprecated.' );
-
-		};
-
-		this.setFrameOfReferenceType = function () {
-
-			console.warn( 'THREE.WebXRManager: setFrameOfReferenceType() has been deprecated.' );
-
-		};
-
-		this.submitFrame = function () {};
 
 	}
 
@@ -24233,7 +24199,7 @@ TWEEN.version = version;
 		// physically based shading
 
 		this.gammaFactor = 2.0;	// for backwards compatibility
-		this.gammaOutput = false;
+		this.outputEncoding = LinearEncoding;
 
 		// physical lights
 
@@ -25377,8 +25343,6 @@ TWEEN.version = version;
 
 				}
 
-				xr.submitFrame();
-
 			}
 
 			// _gl.finish();
@@ -25674,6 +25638,7 @@ TWEEN.version = version;
 				program = programCache.acquireProgram( material, materialProperties.shader, parameters, programCacheKey );
 
 				materialProperties.program = program;
+				materialProperties.outputEncoding = _this.outputEncoding;
 				material.program = program;
 
 			}
@@ -25804,6 +25769,10 @@ TWEEN.version = version;
 				} else if ( materialProperties.numClippingPlanes !== undefined &&
 					( materialProperties.numClippingPlanes !== _clipping.numPlanes ||
 					materialProperties.numIntersection !== _clipping.numIntersection ) ) {
+
+					material.needsUpdate = true;
+
+				} else if ( materialProperties.outputEncoding !== _this.outputEncoding ) {
 
 					material.needsUpdate = true;
 
@@ -26093,10 +26062,6 @@ TWEEN.version = version;
 
 					m_uniforms.color.value.copy( material.color );
 					m_uniforms.opacity.value = material.opacity;
-
-				} else if ( material.envMap ) {
-
-					refreshUniformsCommon( m_uniforms, material );
 
 				}
 
@@ -27136,6 +27101,8 @@ TWEEN.version = version;
 	 * @author benaadams / https://twitter.com/ben_a_adams
 	 */
 
+	var _vector$7 = new Vector3();
+
 	function InterleavedBufferAttribute( interleavedBuffer, itemSize, offset, normalized ) {
 
 		this.data = interleavedBuffer;
@@ -27173,6 +27140,24 @@ TWEEN.version = version;
 	Object.assign( InterleavedBufferAttribute.prototype, {
 
 		isInterleavedBufferAttribute: true,
+
+		applyMatrix4: function ( m ) {
+
+			for ( var i = 0, l = this.data.count; i < l; i ++ ) {
+
+				_vector$7.x = this.getX( i );
+				_vector$7.y = this.getY( i );
+				_vector$7.z = this.getZ( i );
+
+				_vector$7.applyMatrix4( m );
+
+				this.setXYZ( i, _vector$7.x, _vector$7.y, _vector$7.z );
+
+			}
+
+			return this;
+
+		},
 
 		setX: function ( index, x ) {
 
@@ -33466,8 +33451,8 @@ TWEEN.version = version;
 		this.type = 'MeshStandardMaterial';
 
 		this.color = new Color( 0xffffff ); // diffuse
-		this.roughness = 0.5;
-		this.metalness = 0.5;
+		this.roughness = 1.0;
+		this.metalness = 0.0;
 
 		this.map = null;
 
@@ -46432,7 +46417,7 @@ TWEEN.version = version;
 	 * @author bhouston / http://clara.io
 	 */
 
-	var _vector$7 = new Vector2();
+	var _vector$8 = new Vector2();
 
 	function Box2( min, max ) {
 
@@ -46468,7 +46453,7 @@ TWEEN.version = version;
 
 		setFromCenterAndSize: function ( center, size ) {
 
-			var halfSize = _vector$7.copy( size ).multiplyScalar( 0.5 );
+			var halfSize = _vector$8.copy( size ).multiplyScalar( 0.5 );
 			this.min.copy( center ).sub( halfSize );
 			this.max.copy( center ).add( halfSize );
 
@@ -46618,7 +46603,7 @@ TWEEN.version = version;
 
 		distanceToPoint: function ( point ) {
 
-			var clampedPoint = _vector$7.copy( point ).clamp( this.min, this.max );
+			var clampedPoint = _vector$8.copy( point ).clamp( this.min, this.max );
 			return clampedPoint.sub( point ).length();
 
 		},
@@ -47057,7 +47042,7 @@ TWEEN.version = version;
 	 * @author WestLangley / http://github.com/WestLangley
 	 */
 
-	var _vector$8 = new Vector3();
+	var _vector$9 = new Vector3();
 
 	function SpotLightHelper( light, color ) {
 
@@ -47123,9 +47108,9 @@ TWEEN.version = version;
 
 		this.cone.scale.set( coneWidth, coneWidth, coneLength );
 
-		_vector$8.setFromMatrixPosition( this.light.target.matrixWorld );
+		_vector$9.setFromMatrixPosition( this.light.target.matrixWorld );
 
-		this.cone.lookAt( _vector$8 );
+		this.cone.lookAt( _vector$9 );
 
 		if ( this.color !== undefined ) {
 
@@ -47147,7 +47132,7 @@ TWEEN.version = version;
 	 * @author Mugen87 / https://github.com/Mugen87
 	 */
 
-	var _vector$9 = new Vector3();
+	var _vector$a = new Vector3();
 	var _boneMatrix = new Matrix4();
 	var _matrixWorldInv = new Matrix4();
 
@@ -47232,12 +47217,12 @@ TWEEN.version = version;
 			if ( bone.parent && bone.parent.isBone ) {
 
 				_boneMatrix.multiplyMatrices( _matrixWorldInv, bone.matrixWorld );
-				_vector$9.setFromMatrixPosition( _boneMatrix );
-				position.setXYZ( j, _vector$9.x, _vector$9.y, _vector$9.z );
+				_vector$a.setFromMatrixPosition( _boneMatrix );
+				position.setXYZ( j, _vector$a.x, _vector$a.y, _vector$a.z );
 
 				_boneMatrix.multiplyMatrices( _matrixWorldInv, bone.parent.matrixWorld );
-				_vector$9.setFromMatrixPosition( _boneMatrix );
-				position.setXYZ( j + 1, _vector$9.x, _vector$9.y, _vector$9.z );
+				_vector$a.setFromMatrixPosition( _boneMatrix );
+				position.setXYZ( j + 1, _vector$a.x, _vector$a.y, _vector$a.z );
 
 				j += 2;
 
@@ -47419,7 +47404,7 @@ TWEEN.version = version;
 	 * @author Mugen87 / https://github.com/Mugen87
 	 */
 
-	var _vector$a = new Vector3();
+	var _vector$b = new Vector3();
 	var _color1 = new Color();
 	var _color2 = new Color();
 
@@ -47489,7 +47474,7 @@ TWEEN.version = version;
 
 		}
 
-		mesh.lookAt( _vector$a.setFromMatrixPosition( this.light.matrixWorld ).negate() );
+		mesh.lookAt( _vector$b.setFromMatrixPosition( this.light.matrixWorld ).negate() );
 
 	};
 
@@ -48088,7 +48073,7 @@ TWEEN.version = version;
 	 *		http://evanw.github.com/lightgl.js/tests/shadowmap.html
 	 */
 
-	var _vector$b = new Vector3();
+	var _vector$c = new Vector3();
 	var _camera = new Camera();
 
 	function CameraHelper( camera ) {
@@ -48253,7 +48238,7 @@ TWEEN.version = version;
 
 	function setPoint( point, pointMap, geometry, camera, x, y, z ) {
 
-		_vector$b.set( x, y, z ).unproject( camera );
+		_vector$c.set( x, y, z ).unproject( camera );
 
 		var points = pointMap[ point ];
 
@@ -48263,7 +48248,7 @@ TWEEN.version = version;
 
 			for ( var i = 0, l = points.length; i < l; i ++ ) {
 
-				position.setXYZ( points[ i ], _vector$b.x, _vector$b.y, _vector$b.z );
+				position.setXYZ( points[ i ], _vector$c.x, _vector$c.y, _vector$c.z );
 
 			}
 
@@ -50265,7 +50250,7 @@ TWEEN.version = version;
 		vr: {
 			get: function () {
 
-				console.warn( 'THREE.WebGLRenderer: .vr has been removed. Use .xr instead.' );
+				console.warn( 'THREE.WebGLRenderer: .vr has been renamed to .xr' );
 				return this.xr;
 
 			}
@@ -50273,13 +50258,27 @@ TWEEN.version = version;
 		gammaInput: {
 			get: function () {
 
-				console.warn( 'THREE.WebGLRenderer: .gammaInput has been removed. Please define the correct color spaces for textures via Texture.encoding instead.' );
+				console.warn( 'THREE.WebGLRenderer: .gammaInput has been removed. Set the encoding for textures via Texture.encoding instead.' );
 				return false;
 
 			},
 			set: function () {
 
-				console.warn( 'THREE.WebGLRenderer: .gammaInput has been removed. Please define the correct color spaces for textures via Texture.encoding instead.' );
+				console.warn( 'THREE.WebGLRenderer: .gammaInput has been removed. Set the encoding for textures via Texture.encoding instead.' );
+
+			}
+		},
+		gammaOutput: {
+			get: function () {
+
+				console.warn( 'THREE.WebGLRenderer: .gammaOutput has been removed. Set WebGLRenderer.outputEncoding instead.' );
+				return false;
+
+			},
+			set: function ( value ) {
+
+				console.warn( 'THREE.WebGLRenderer: .gammaOutput has been removed. Set WebGLRenderer.outputEncoding instead.' );
+				this.outputEncoding = ( value === true ) ? sRGBEncoding : LinearEncoding;
 
 			}
 		}
@@ -68156,7 +68155,7 @@ THREE.PMREMGenerator = ( function () {
 		var upSign = [ 1, 1, 1, 1, - 1, 1 ];
 		var forwardSign = [ 1, 1, - 1, - 1, - 1, 1 ];
 
-		var gammaOutput = _renderer.gammaOutput;
+		var outputEncoding = _renderer.outputEncoding;
 		var toneMapping = _renderer.toneMapping;
 		var toneMappingExposure = _renderer.toneMappingExposure;
 		var clearColor = _renderer.getClearColor();
@@ -68164,7 +68163,7 @@ THREE.PMREMGenerator = ( function () {
 
 		_renderer.toneMapping = THREE.LinearToneMapping;
 		_renderer.toneMappingExposure = 1.0;
-		_renderer.gammaOutput = false;
+		_renderer.outputEncoding = THREE.LinearEncoding;
 		scene.scale.z *= - 1;
 
 		var background = scene.background;
@@ -68212,7 +68211,7 @@ THREE.PMREMGenerator = ( function () {
 
 		_renderer.toneMapping = toneMapping;
 		_renderer.toneMappingExposure = toneMappingExposure;
-		_renderer.gammaOutput = gammaOutput;
+		_renderer.outputEncoding = outputEncoding;
 		_renderer.setClearColor( clearColor, clearAlpha );
 		scene.scale.z *= - 1;
 
@@ -79646,12 +79645,12 @@ materials = {
     // disable shadow for work only in shadow pass
     // launch on start before create any material
 
-    disableShadow: function ( ) {
+    /*disableShadow: function ( ) {
 
         shaderShadow = THREE.ShaderChunk.shadowmap_pars_fragment;
         shaderShadow = shaderShadow.replace( 'float shadow = 1.0;', ['float shadow = 1.0;','if( renderMode != 3 ) return shadow;',  ''].join( "\n" ) )
 
-    },
+    },*/
 
     setMode:function( n ){
 
@@ -79666,6 +79665,28 @@ materials = {
 
 
     make: function ( o ){
+
+        /*if( shaderShadow === null ){
+
+            shaderShadow = THREE.ShaderChunk.lights_fragment_begin;
+            //shaderShadow = shaderShadow.replace( 'float shadow = 1.0;', ['float shadow = 1.0;','if( renderMode != 3 ) return shadow;',  ''].join( "\n" ) );
+
+           // shaderShadow = shaderShadow.replace( 'pointLight.shadowCameraFar )', 'pointLight.shadowCameraFar )*extraShadow' );
+           // shaderShadow = shaderShadow.replace( 'vSpotShadowCoord[ i ] )', 'vSpotShadowCoord[ i ] )*extraShadow' );
+
+           shaderShadow = shaderShadow.replace( 'geometry.viewDir = ( isOrthographic ) ? vec3( 0, 0, 1 ) : normalize( vViewPosition );',
+            ['geometry.viewDir = ( isOrthographic ) ? vec3( 0, 0, 1 ) : normalize( vViewPosition );', 'float extraShadowColor = 1.0;' ].join( "\n" ) );
+            shaderShadow = shaderShadow.replace( 
+                '#if defined( USE_SHADOWMAP ) && ( UNROLLED_LOOP_INDEX < NUM_DIR_LIGHT_SHADOWS )', 
+                [
+               //'',
+                '#if defined( USE_SHADOWMAP ) && ( UNROLLED_LOOP_INDEX < NUM_DIR_LIGHT_SHADOWS )',
+                ' ',
+                  'extraShadowColor = all( bvec3( directionalLight.shadow, directLight.visible, receiveShadow ) ) ? getShadow( directionalShadowMap[ i ], directionalLight.shadowMapSize, directionalLight.shadowBias, directionalLight.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;',
+                  //'directLight.color *= extraShadowColor',
+                  ].join( "\n" ) );
+
+        }*/
 
         var name;
 
@@ -79724,7 +79745,11 @@ materials = {
         delete( o.isTmp );  
 
         // search best setting
-        o.shadowSide = o.shadowSide !== undefined || false;
+        // if null SIDE    |  SHADOWSIDE
+        // THREE.FrontSide    THREE.BackSide 
+        // THREE.BackSide     THREE.FrontSide
+        // THREE.DoubleSide   THREE.DoubleSide
+        o.shadowSide = o.shadowSide !== undefined || null;
 
         // parametre refine 
 
@@ -79805,7 +79830,8 @@ materials = {
 
     	 	uniforms['renderMode'] = { value: settings.mode };
     	 	uniforms['depthPacking'] = { value: 1 };
-            uniforms['extraShadow'] = { value: null };
+            //uniforms['extraShadowColor'] = { value: 1 };
+            uniforms['extraShadow'] = { value: 0.3 };
             
 
             shader.uniforms = uniforms;
@@ -79816,7 +79842,9 @@ materials = {
 
             var fragment = shader.fragmentShader;
 
-            fragment = fragment.replace( 'uniform vec3 diffuse;', ['uniform vec3 diffuse;', 'uniform int renderMode;', 'uniform int depthPacking;', 'uniform sampler2D extraShadow;'].join("\n") );
+            //fragment = fragment.replace( '#include <shadowmap_pars_fragment>', ['#include <shadowmap_pars_fragment>', '#include <shadowmask_pars_fragment>'].join("\n")  );
+
+            fragment = fragment.replace( 'uniform vec3 diffuse;', ['uniform vec3 diffuse;', 'uniform int renderMode;', 'uniform int depthPacking;', 'uniform float extraShadow;'].join("\n") );
 
             // depth pass
             fragment = fragment.replace('#include <alphatest_fragment>', materials.directDepth );
@@ -79830,6 +79858,61 @@ materials = {
             }
             
             if( mat.type !=='MeshBasicMaterial') fragment = fragment.replace('#include <normal_fragment_maps>', materials.directNormal );
+
+
+            if( mat.type === 'MeshStandardMaterial' ){
+
+                fragment = fragment.replace( '#include <lights_fragment_begin>', materials.lightBegin  );
+
+                //vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + reflectedLight.directSpecular + reflectedLight.indirectSpecular + totalEmissiveRadiance;
+
+
+                //fragment = fragment.replace('varying vec3 vNormal;', '' );
+                fragment = fragment.replace( 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );', [
+
+                    'float sd = shadowFull;',
+                    '#ifdef USE_AOMAP',
+                    '    sd *= ambientOcclusion;',
+                    '#if defined( USE_ENVMAP ) && defined( STANDARD )',
+                        //'float dotNV = saturate( dot( geometry.normal, geometry.viewDir ) );',
+                        'sd *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.specularRoughness );',
+                    '#endif',
+                    '#endif',
+
+                    //'float dotNVX = saturate( dot( geometry.normal, geometry.viewDir ) );',
+                    //'sd *= dotNVX;',
+
+
+                    //'float sd = getShadowMask();',
+                    //'sd = pow( abs(sd), 0.99);',
+                    //'sd = clamp(sd*3.0, 0.0, 1.0);',
+                    //'gl_FragColor = vec4( vec3(0.0), opacity * ( 1.0 - sd) );',
+                    'vec3 shadowMaping = mix( vec3(0.0), outgoingLight, sd );',
+                    'outgoingLight = mix( outgoingLight, shadowMaping, extraShadow );',
+
+                    /*'float diff = (reflectedLight.directDiffuse.r + reflectedLight.directDiffuse.g + reflectedLight.directDiffuse.b)/3.0;',//metal
+                    'float spec = (reflectedLight.directSpecular.r + reflectedLight.directSpecular.g + reflectedLight.directSpecular.b)/3.0;',// metal & rough
+                    //'vec3 tmpS = reflectedLight.directSpecular;',
+                    'vec3 tmpS = (reflectedLight.directDiffuse + reflectedLight.directSpecular);',
+                    'vec3 tmpG = reflectedLight.indirectDiffuse + reflectedLight.indirectSpecular;',
+                    
+                    'float sg = (tmpG.r + tmpG.g + tmpG.b)/3.0;',
+
+                    //'spec /= ( 1.0 - max( roughnessFactor, 0.9 ) );',
+                    'float sd = diff + spec;',
+                    //'sd /= ( 1.0 - max( metalnessFactor, 0.9 ) );',
+                    //',
+                    //'sd /= ( 1.0 - metalnessFactor );',
+                    
+                    //*/
+                    //'sd *= 10.0;', 
+                    //'gl_FragColor = vec4( vec3(sd), diffuseColor.a );',
+                    'if( renderMode == 3 ) gl_FragColor = vec4( vec3(sd), diffuseColor.a );',
+                    'else gl_FragColor = vec4( outgoingLight, diffuseColor.a );'
+                ].join("\n") );
+                //fragment = fragment.replace('#include <specularmap_fragment>', ['#include <specularmap_fragment>', '#include <normal_fragment_begin>', '#include <normal_fragment_maps>'].join("\n") );
+
+            }
 
 
             // remplace end of main
@@ -80040,15 +80123,106 @@ materials = {
 
     lightEnd: [
     '#if defined( RE_IndirectDiffuse )',
-        'if( renderMode == 3 ) irradiance = vec3(0.0);',
+        //'if( renderMode == 3 ) irradiance = vec3(0.0);',
+        'irradiance = vec3(0.0);',
         'RE_IndirectDiffuse( irradiance, geometry, material, reflectedLight );',
     '#endif',
     '#if defined( RE_IndirectSpecular )',
-        'if( renderMode == 3 ) radiance = vec3(0.0);',
+        //'if( renderMode == 3 ) radiance = vec3(0.0);',
+        'radiance = vec3(0.0);',
         'RE_IndirectSpecular( radiance, iblIrradiance, clearcoatRadiance, geometry, material, reflectedLight );',
     '#endif',
     '',
     ].join("\n"),
+
+
+    lightBegin: [
+
+    'float shadowTmp = 1.0;',
+    'float shadowFull = 1.0;',
+
+    'GeometricContext geometry;',
+    'geometry.position = - vViewPosition;',
+    'geometry.normal = normal;',
+    'geometry.viewDir = ( isOrthographic ) ? vec3( 0, 0, 1 ) : normalize( vViewPosition );',
+    
+    '#ifdef CLEARCOAT',
+    '   geometry.clearcoatNormal = clearcoatNormal;',
+    '#endif',
+
+    'IncidentLight directLight;',
+    '#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )',
+    '   PointLight pointLight;',
+    '   #pragma unroll_loop',
+    '   for ( int i = 0; i < NUM_POINT_LIGHTS; i ++ ) {',
+    '       pointLight = pointLights[ i ];',
+    '       getPointDirectLightIrradiance( pointLight, geometry, directLight );',
+    '       #if defined( USE_SHADOWMAP ) && ( UNROLLED_LOOP_INDEX < NUM_POINT_LIGHT_SHADOWS )',
+    '       shadowTmp = all( bvec3( pointLight.shadow, directLight.visible, receiveShadow ) ) ? getPointShadow( pointShadowMap[ i ], pointLight.shadowMapSize, pointLight.shadowBias, pointLight.shadowRadius, vPointShadowCoord[ i ], pointLight.shadowCameraNear, pointLight.shadowCameraFar ) : 1.0;',
+    '       directLight.color *= shadowTmp',
+    '       shadowFull *= shadowTmp;',
+    '       #endif',
+    '       RE_Direct( directLight, geometry, material, reflectedLight );',
+    '   }',
+    '#endif',
+
+    '#if ( NUM_SPOT_LIGHTS > 0 ) && defined( RE_Direct )',
+    '   SpotLight spotLight;',
+    '   #pragma unroll_loop',
+    '   for ( int i = 0; i < NUM_SPOT_LIGHTS; i ++ ) {',
+    '       spotLight = spotLights[ i ];',
+    '       getSpotDirectLightIrradiance( spotLight, geometry, directLight );',
+    '       #if defined( USE_SHADOWMAP ) && ( UNROLLED_LOOP_INDEX < NUM_SPOT_LIGHT_SHADOWS )',
+    '       shadowTmp = all( bvec3( spotLight.shadow, directLight.visible, receiveShadow ) ) ? getShadow( spotShadowMap[ i ], spotLight.shadowMapSize, spotLight.shadowBias, spotLight.shadowRadius, vSpotShadowCoord[ i ] ) : 1.0;',
+    '       directLight.color *= shadowTmp',
+    '       shadowFull *= shadowTmp;',
+    '       #endif',
+    '       RE_Direct( directLight, geometry, material, reflectedLight );',
+    '   }',
+    '#endif',
+
+    '#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )',
+    '   DirectionalLight directionalLight;',
+    '   #pragma unroll_loop',
+    '   for ( int i = 0; i < NUM_DIR_LIGHTS; i ++ ) {',
+    '       directionalLight = directionalLights[ i ];',
+    '       getDirectionalDirectLightIrradiance( directionalLight, geometry, directLight );',
+    '       #if defined( USE_SHADOWMAP ) && ( UNROLLED_LOOP_INDEX < NUM_DIR_LIGHT_SHADOWS )',
+    '       shadowTmp = all( bvec3( directionalLight.shadow, directLight.visible, receiveShadow ) ) ? getShadow( directionalShadowMap[ i ], directionalLight.shadowMapSize, directionalLight.shadowBias, directionalLight.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;',
+    '       directLight.color *= shadowTmp;',
+    '       shadowFull *= shadowTmp;',
+    '       #endif',
+    '       RE_Direct( directLight, geometry, material, reflectedLight );',
+    '   }',
+    '#endif',
+
+    '#if ( NUM_RECT_AREA_LIGHTS > 0 ) && defined( RE_Direct_RectArea )',
+    '   RectAreaLight rectAreaLight;',
+    '   #pragma unroll_loop',
+    '   for ( int i = 0; i < NUM_RECT_AREA_LIGHTS; i ++ ) {',
+    '       rectAreaLight = rectAreaLights[ i ];',
+    '       RE_Direct_RectArea( rectAreaLight, geometry, material, reflectedLight );',
+    '   }',
+    '#endif',
+
+    '#if defined( RE_IndirectDiffuse )',
+    '   vec3 iblIrradiance = vec3( 0.0 );',
+    '   vec3 irradiance = getAmbientLightIrradiance( ambientLightColor );',
+    '   irradiance += getLightProbeIrradiance( lightProbe, geometry );',
+    '   #if ( NUM_HEMI_LIGHTS > 0 )',
+    '       #pragma unroll_loop',
+    '       for ( int i = 0; i < NUM_HEMI_LIGHTS; i ++ ) {',
+    '           irradiance += getHemisphereLightIrradiance( hemisphereLights[ i ], geometry );',
+    '       }',
+    '   #endif',
+
+    '#endif',
+    '#if defined( RE_IndirectSpecular )',
+    '   vec3 radiance = vec3( 0.0 );',
+    '   vec3 clearcoatRadiance = vec3( 0.0 );',
+    '#endif',
+    '',
+    ].join("\n")
 
 
 }
@@ -80073,14 +80247,14 @@ var logo = ( function () {
         bottomLogo = document.createElement( 'a' );
         bottomLogo.href = "https://github.com/lo-th";
         bottomLogo.target = "_blank";
-        bottomLogo.style.cssText = 'position:absolute; width:60px; height:30px; left:6px; bottom:13px; pointer-events:auto; cursor:pointer;'
-        bottomLogo.innerHTML = this.icon( '3TH', '#787978' );
+        bottomLogo.style.cssText = 'position:absolute; width:60px; height:30px; left:10px; bottom:13px; pointer-events:auto; cursor:pointer;'
+        bottomLogo.innerHTML = this.icon( '3TH', '#CCCCCC' );
         document.body.appendChild( bottomLogo );
 
         logoSvg = document.getElementById( '3TH' );
         //bottomLogo.addEventListener('click',  window.location.assign('https://github.com/lo-th'  );, false );
         bottomLogo.addEventListener('mouseover', function(){ logoSvg.setAttributeNS(null,"fill",selectColor) }, false );
-        bottomLogo.addEventListener('mouseout', function(){ logoSvg.setAttributeNS(null,"fill",'#787978') }, false );
+        bottomLogo.addEventListener('mouseout', function(){ logoSvg.setAttributeNS(null,"fill",'#CCCCCC') }, false );
 
     },
 
@@ -80091,7 +80265,7 @@ var logo = ( function () {
         ww = ww || 40;
         color = color || '#DEDEDE';
         var viewBox = '0 0 '+ww+' '+ww;
-        var extra = '';
+        var extra = "<filter id='f2' x='0' y='0' width='100%' height='100%'><feOffset result='offOut' in='SourceAlpha' dx='1' dy='1' /><feGaussianBlur result='blurOut' in='offOut' stdDeviation='1' /><feBlend in='SourceGraphic' in2='blurOut' mode='normal' /></filter>";
 
         if(type === '3TH'){ 
             viewBox = '0 0 100 50'; 
@@ -80110,6 +80284,15 @@ var logo = ( function () {
             t[1]+="L 18.4 17.7 18.4 27.9 21.6 27.9 Q 23.45 28 24.9 29.35 25.5 30.05 25.9 30.85 26.3 31.8 26.3 32.95 26.3 35.1 24.9 36.55 23.45 38 21.35 38.1 L 21.25 38.1 Q 19.1 38.1 17.65 36.55 16.1 35.1 16.1 32.95 16.1 32.85 16.1 32.75 L 6 32.75";
             t[1]+="Q 6 32.85 6 32.95 6 39.3 10.45 43.75 12.8 46.15 15.8 47.25 18.3 48.3 21.25 48.3 L 21.35 48.3 Q 26 48.2 29.6 45.8 30.95 44.9 32.1 43.75 36.5 39.3 36.5 32.95 36.5 31.9 36.4 30.85 36.2 29.35 35.8 27.9 L 39.5 27.9 39.5 32.75 Q 39.5 32.85 39.5 32.95 39.5 39.3 44.05 43.75 48.45 48.3 54.85 48.3 L 60.45 48.3 60.45 38.1 54.75 38.1";
             t[1]+="Q 52.7 38.1 51.15 36.55 49.7 35.1 49.7 32.95 L 49.7 27.9 54.75 27.9 Q 54.85 27.9 54.95 27.9 L 63.4 27.9 63.4 48.3 73.6 48.3 73.6 32.95 Q 73.6 30.85 75.05 29.35 76.3 28.2 77.85 27.9 78.15 27.9 78.55 27.9 L 78.65 27.9 Q 80.85 27.9 82.25 29.35 83.7 30.85 83.7 32.95 L 83.7 48.3 Z'/>"
+            break;
+
+            case 'NEXT':
+            //t[1]="<path id='NEXT1' stroke='"+color+"' stroke-width='22' stroke-linejoin='miter' stroke-linecap='butt' stroke-miterlimit='3' fill='none' d='M 231.95 127.95 Q 231.95 171.05 201.45 201.45 171.05 231.95 127.95 231.95 84.85 231.95 54.4 201.45 23.95 171.05 23.95 127.95 23.95 84.85 54.4 54.4 84.85 23.95 127.95 23.95 171.05 23.95 201.45 54.4 231.95 84.85 231.95 127.95 Z'/>";
+            t[1]="<path id='NEXT' stroke='"+color+"' stroke-width='28' stroke-linejoin='miter' stroke-linecap='butt' stroke-miterlimit='3' fill='none' d='M 102.55 73.8 L 156.8 128.05 102.55 182.25'/>";
+            break;
+            case 'PREV':
+            //t[1]="<path id='PREV1' stroke='"+color+"' stroke-width='22' stroke-linejoin='miter' stroke-linecap='butt' stroke-miterlimit='3' fill='none' d='M 231.95 127.95 Q 231.95 171.05 201.45 201.45 171.05 231.95 127.95 231.95 84.85 231.95 54.4 201.45 23.95 171.05 23.95 127.95 23.95 84.85 54.4 54.4 84.85 23.95 127.95 23.95 171.05 23.95 201.45 54.4 231.95 84.85 231.95 127.95 Z'/>";
+            t[1]="<path id='PREV' stroke='"+color+"' stroke-width='28' stroke-linejoin='miter' stroke-linecap='butt' stroke-miterlimit='3' fill='none' d='M 156.75 73.8 L 102.5 128.05 156.75 182.25'/>";
             break;
 
         }
@@ -80975,7 +81158,8 @@ view = {
 
         renderer.physicallyCorrectLights = setting.physicallyCorrectLights;
         //renderer.gammaInput = setting.gammaInput;
-        renderer.gammaOutput = setting.gammaOutput;
+        //renderer.gammaOutput = setting.gammaOutput;
+        renderer.outputEncoding = setting.gammaOutput ? THREE.sRGBEncoding : THREE.LinearEncoding;//GammaEncoding;;// ;
         renderer.toneMapping = toneMappings[ setting.type ];
         renderer.toneMappingExposure = setting.exposure;
         renderer.toneMappingWhitePoint = setting.whitePoint;
@@ -81162,7 +81346,7 @@ view = {
 
             shadowMat = new THREE.ShadowMaterial({ opacity:0.5, depthTest:true, depthWrite:false });
 
-            if(isHighShadow){
+            //if(isHighShadow){
 
                 // overwrite shadowmap code
                 var shaderShadow = THREE.ShaderChunk.shadowmap_pars_fragment;
@@ -81177,7 +81361,7 @@ view = {
 
                 }
 
-            }
+            //}
 
 
         }
@@ -81187,8 +81371,11 @@ view = {
         renderer.shadowMap.enabled = true;
 
         if( !isHighShadow ){
-            renderer.shadowMap.soft = true;
+            //renderer.shadowMap.soft = true;
+            //renderer.shadowMap.type = THREE.PCFShadowMap;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            //renderer.shadowMap.type = THREE.VSMShadowMap;
         }
 
         shadowGround = new THREE.Mesh( geo.planeX, shadowMat );
@@ -81226,8 +81413,9 @@ view = {
 
         sun.shadow.mapSize.width = o.resolution || 2048;
         sun.shadow.mapSize.height = o.resolution || 2048;
-        sun.shadow.bias = o.bias || 0.00001;
-
+        sun.shadow.bias = o.bias || -0.001;
+        sun.shadow.radius = 2.0; // def 1
+        
         var gr = o.groundSize || 200;
         var py = o.groundY || 0;
 

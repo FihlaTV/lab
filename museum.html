@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<!-- saved from url=(0014)about:internet -->
+<html lang="en">
+<head>
+<title>Museum 0.3</title>
+<link rel="apple-touch-icon" sizes="57x57" href="apple-icon-57x57.png">
+<link rel="apple-touch-icon" sizes="60x60" href="apple-icon-60x60.png">
+<link rel="apple-touch-icon" sizes="72x72" href="apple-icon-72x72.png">
+<link rel="apple-touch-icon" sizes="76x76" href="apple-icon-76x76.png">
+<link rel="apple-touch-icon" sizes="114x114" href="apple-icon-114x114.png">
+<link rel="apple-touch-icon" sizes="120x120" href="apple-icon-120x120.png">
+<link rel="apple-touch-icon" sizes="144x144" href="apple-icon-144x144.png">
+<link rel="apple-touch-icon" sizes="152x152" href="apple-icon-152x152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-icon-180x180.png">
+<link rel="icon" type="image/png" sizes="192x192"  href="android-icon-192x192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="manifest" href="manifest.json">
+<meta name="msapplication-TileColor" content="#ffffff">
+<meta name="msapplication-TileImage" content="ms-icon-144x144.png">
+<meta name="theme-color" content="#ffffff">
+<style>
+*{ 
+	margin: 0; padding: 0; border: 0; 
+	-o-user-select:none; -ms-user-select:none; -khtml-user-select:none; 
+	-webkit-user-select:none; -moz-user-select:none; pointer-events:none;
+}
+html{ width: 100%; height: 100%; }
+body{ font-family:Monospace; background:#333; }
+</style>
+
+<script src="./src/libs/three.js"></script>
+<script src="./src/libs/sea3d.js"></script>
+<script src="./src/libs/tween.js"></script>
+<script src="./src/libs/uil.js"></script>
+
+<script src="./src/controls/OrbitControls.js"></script>
+<script src="./src/controls/OrbitControlsExtra.js"></script>
+
+<script src="./src/pmrem/PMREMGenerator.js"></script>
+
+<script src="./src/objects/Lensflare.js"></script>
+<script src="./src/objects/Reflector.js"></script>
+
+<script src="./src/tools/imgTool.js"></script>
+
+<script src="./src/geometries/TorusGeometry.js"></script>
+<script src="./src/geometries/SphereGeometry.js"></script>
+<script src="./src/geometries/Capsule.js"></script>
+<script src="./src/geometries/ChamferCyl.js"></script>
+<script src="./src/geometries/ChamferBox.js"></script>
+<script src="./src/geometries/SphereBox.js"></script>
+
+<script src="./src/shaders/Diamond.js"></script>
+
+<script src="./src/textures.js"></script>
+<script src="./src/materials.js"></script>
+<script src="./src/logo.js"></script>
+<script src="./src/math.js"></script>
+<script src="./src/pool.js"></script>
+<script src="./src/sky.js"></script>
+<script src="./src/view.js"></script>
+<script src="./build/lab.min.js"></script>
+</head>
+
+<body>
+<script>
+envmapList = [
+    "alley", "arches", "bridge", "castle", "cave", "church", "colors", "downtown", "factory", "freez", "gallery", 
+    "japan", "green", "lake", "loft", "milkyway", "mit", "night", "outside", "parking", "photo", "pisa", "place", "road", 
+    "red", "river", "rock", "room", "snow", "stars","street", "studio", "sunset",  "tokyo", "tonight", 
+    "tunnel", "veranda", "yellow", "theatre"
+];
+
+var modelList = [
+    'nymph', 'nymphea', 'rhino', 'panthere', 'bear', 'bressant', 'pan', 'bust', 'dogs', 'puke', 
+    'nefertiti', 'david', 'frost', 'zephyr', 'wakeup', 'bacchus', 'boy', 'dragon', 'fisherman', 
+    'hunter', 'mars', 'mercury', 'venus', 'polyhymnia', 'neptune', 'magdalene', 'discobolus', 'boxer'
+];
+
+var mesh;
+var material;
+var modelName;
+var current = 0;
+var nameText;
+
+var skySetting;
+
+
+var setting = {
+
+	sky: 'river',
+	autoRotation: false,
+
+	metal:0.4, 
+	rough:0.6,
+	ao:1,
+	env:1,
+	normal:1,
+	shadow:0.3,
+
+	mode:0,
+
+};
+
+view.setBg( 0x000000, 0 );
+view.init( init );
+
+
+function init() {
+
+	logo.init();
+
+	sky.takePalette( imgTool );
+
+
+	view.setTone({ physicallyCorrectLights: true });
+
+	view.moveCam({ distance:60, target:[0,20,0], time:200 });
+
+	view.setShadow({ size:100, near:100, far:300, debug:false });
+
+	view.setSky({ url:setting.sky + '.jpg', hour:14, gradiant: true });
+
+	view.hideGrid(true);
+
+
+	//view.addMirror({y:-0.1, opacity:0.1 });
+
+	var c = view.getControler();
+	c.screenSpacePanning = true;
+    //c.maxPolarAngle = 90*Math.torad;//Math.PI / 2;
+    c.enableDamping = true; 
+    c.dampingFactor = 0.5;//0.25;
+
+
+
+	view.update = update;
+
+
+	initGUI();
+
+	addButton ();
+
+	loadOne();
+
+}
+
+
+function update () {
+
+	if( mesh && setting.autoRotation ) mesh.rotation.y += 0.003;
+
+}
+
+function prev () {
+
+	current--;
+	if(current<0) current = modelList.length-1;
+	loadOne ()
+
+}
+
+function next () {
+
+	current++;
+	if(current>modelList.length-1) current = 0;
+	loadOne ()
+
+}
+
+function loadOne () {
+
+	materials.clear();
+
+	modelName = modelList[ current ];
+
+	displayName();
+
+	var geo = view.getGeo();
+	//material = new THREE.ShadowMaterial({ opacity:1.0, depthTest:true, depthWrite:true });
+	material = view.material({ 
+		name:'sculpture', color:0xdfcebe,
+		metalness:setting.metal, roughness:setting.rough, 
+		normalMap:{url:'museum/' + modelName+'_n.jpg'}, 
+		aoMap:{url:'museum/' + modelName+'_ao.jpg' }, 
+		aoMapIntensity: setting.ao,
+		envMapIntensity: setting.env,
+		normalScale:[setting.normal, setting.normal ],
+	});
+	view.load ( ['museum/' + modelName+'.sea'], afterLoad, true, true );
+
+}
+
+function afterLoad () {
+
+	if( mesh ) view.remove( mesh );
+
+	var g = view.getGeometry( modelName, modelName+'_0', true );
+
+	var size = g.boundingBox.max.y*0.5;
+	view.moveCam({ distance:size*3, target:[0,size,0], time:200 });
+	
+	mesh = new THREE.Mesh( g, material );
+
+
+	mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+	view.add( mesh );
+
+	// var diamondMat3 = new Diamond( g, view.getRenderer(), view.getSkyCube() )
+	// mesh.material = diamondMat3
+
+
+
+}
+
+function changeSky ( name ) {
+
+	setting.sky = name;
+	view.addSky({ url: name + '.jpg', gradiant: true });
+
+}
+
+// GUI
+
+function initGUI() {
+
+	skySetting = sky.getSetting();
+
+	UIL.Tools.colors.backgroundOver = 'rgba(11,11,11,0)';
+	UIL.Tools.colors.text = 'rgba(220,220,220,0.6)';
+	UIL.Tools.colors.button = 'rgba(220,220,220,0.3)';
+	UIL.Tools.colors.boolbg = 'rgba(220,220,220,0.1)';
+	UIL.Tools.colors.scrollback = 'rgba(220,220,220,0.1)';
+	UIL.Tools.colors.scrollbackover = 'rgba(220,220,220,0.3)';
+	UIL.Tools.setText(13, 'rgba(255,255,255,0.6)', 'Monospace', '1px 1px 1px rgba(11,11,11,0.3)')
+
+	var hb = 14;
+    var hc = '#929292';
+    var tc = '#D4B87B';
+
+	var ui = new UIL.Gui( { w:200, bg:'rgba(23,23,23,0)', close:false } );
+
+	//ui.add('button', { name:'NEXT MODEL', fontColor:tc, h:30, p:0, radius:10 }).onChange( next );
+	//ui.add('button', { name:'PREV MODEL', fontColor:tc, h:30, p:0, radius:10 }).onChange( prev );
+
+	ui.add('list', { name:'ENVMAP', list:envmapList, path:'assets/textures/envmap/mini/', format:'.jpg', imageSize: [128,64], value:setting.sky, h:64,  p:0, bColor:'rgba(11,11,11,0)'}).onChange( changeSky );
+
+	ui.add('Bool', { name:'show background', value:false, p:70, bColor:hc, inh:hb } ).onChange( view.showBackground );
+
+	ui.add( setting, 'autoRotation', { type:'bool', p:70, bColor:hc, inh:hb} );
+
+	ui.add('title',  { name:'MATERIAL', h:30});
+	ui.add( setting, 'metal', { min:0, max:1, fontColor:tc } ).onChange( setMaterial );
+    ui.add( setting, 'rough', { min:0, max:1, fontColor:tc } ).onChange( setMaterial );
+    ui.add( setting, 'ao', { min:0, max:2, fontColor:tc } ).onChange( setMaterial );
+    ui.add( setting, 'env', { min:0, max:3, fontColor:tc } ).onChange( setMaterial );
+    ui.add( setting, 'normal', { min:0, max:2, fontColor:tc } ).onChange( setMaterial );
+    ui.add( setting, 'shadow', { min:0, max:1, fontColor:tc } ).onChange( setMaterial );
+
+    ui.add('title',  { name:'LIGHT', h:30});
+    ui.add( skySetting, 'hour', { min:0, max:24, fontColor:tc } ).onChange( sky.updateTime );
+    ui.add( skySetting, 'azimuth', { min:0, max:360, fontColor:tc } ).onChange( sky.updateTime );
+    ui.add( skySetting, 'power', { min:0, max:100, fontColor:tc } ).onChange( sky.updateTime );
+
+    ui.add('title',  { name:'RENDER', h:30});
+    ui.add( setting, 'mode', { min:0, max:3, precision:0, fontColor:tc } ).onChange( materials.setMode );
+
+  
+}
+
+function setMaterial () {
+
+	if(!material) return;
+	material.metalness = setting.metal;
+	material.roughness = setting.rough;
+	material.aoMapIntensity = setting.ao;
+	material.envMapIntensity = setting.env;
+	material.normalScale.set( setting.normal, setting.normal );
+	material.uniforms.extraShadow.value = setting.shadow;
+
+}
+
+function displayName () {
+	nameText.textContent = modelName.toUpperCase()
+}
+
+function addButton () {
+
+	var s = 60;
+
+	nameText = document.createElement( 'div' );
+    nameText.style.cssText = 'position:absolute; width:200px; height:'+s+'px; right:calc(50% - 100px); top:18px; pointer-events:none; color:#CCCCCC; text-align:center; font-size: 20px; font-weight:bold; text-shadow:1px 1px 1px rgba(11,11,11,0.3);';
+    document.body.appendChild( nameText );
+
+	var nextB = document.createElement( 'div' );
+    nextB.style.cssText = 'position:absolute; width:'+s+'px; height:'+s+'px; right:calc(50% - 120px); top:0px; pointer-events:auto; cursor:pointer;'
+    nextB.innerHTML = logo.icon( 'NEXT', '#CCCCCC', s, 256 );
+    document.body.appendChild( nextB );
+
+    var prevB = document.createElement( 'div' );
+    prevB.style.cssText = 'position:absolute; width:'+s+'px; height:'+s+'px; left:calc(50% - 125px); top:0px; pointer-events:auto; cursor:pointer;'
+    prevB.innerHTML = logo.icon( 'PREV', '#CCCCCC', s, 256 );
+    document.body.appendChild( prevB );
+
+        var nextLogo = document.getElementById( 'NEXT' );
+        var prevLogo = document.getElementById( 'PREV' );
+        
+        nextB.addEventListener( 'click',  next, false );
+        prevB.addEventListener( 'click',  prev, false );
+
+        nextB.addEventListener('mouseover', function(){ 
+        	nextLogo.setAttributeNS(null,"stroke",'#D4B87B');
+        }, false );
+        nextB.addEventListener('mouseout', function(){ 
+        	nextLogo.setAttributeNS(null,"stroke",'#CCCCCC');
+        }, false );
+
+        prevB.addEventListener('mouseover', function(){ 
+        	prevLogo.setAttributeNS(null,"stroke",'#D4B87B');
+        }, false );
+        prevB.addEventListener('mouseout', function(){ 
+        	prevLogo.setAttributeNS(null,"stroke",'#CCCCCC');
+        }, false );
+
+}
+
+</script>
+</body>
+</html>

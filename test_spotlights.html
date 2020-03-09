@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - lights - spot light</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	
+		<style> 
+		    body { margin: 0px; background-color: #404040; overflow: hidden; }
+		    #info {position:absolute;}
+		</style>
+		<script src='./src/libs/three.js'></script>
+		<script src='./src/libs/tween.js'></script>
+		<script src="./src/libs/uil.js"></script>
+		<script src='./src/math.js'></script>
+		<script src='./src/controls/OrbitControls.js'></script>
+		<script src='./src/geometries/CylinderGeometry.js'></script>
+		<script src='./src/lth/SpotLight_Add.js'></script>
+
+		<script src="./src/libs/sea3d.js"></script>
+		<script src='./src/pool.js'></script>
+		<script src='./src/view.js'></script>
+    </head>
+	<body>
+
+		<div id="info">
+		</div>
+
+		<script>
+
+		var setting = {
+
+			anglePower: 8,
+			attenuation: 20,
+
+		};
+
+		var cone = null;
+
+	    var n = 1;
+	    var lights = [];
+	    var lightsHelper = [];
+
+		var renderer = new THREE.WebGLRenderer();
+		renderer.setPixelRatio( window.devicePixelRatio );
+		renderer.setClearColor( 0x000000, 1 );
+
+		var camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 2000 );
+
+		var controls = new THREE.OrbitControls( camera, renderer.domElement );
+
+		var scene = new THREE.Scene();
+
+		var matFloor = new THREE.MeshPhongMaterial();
+		var matBox = new THREE.MeshStandardMaterial( { color: 0xaaaaaa } );
+
+		var geoFloor = new THREE.PlaneBufferGeometry( 2000, 2000 );
+		var geoBox = new THREE.BoxBufferGeometry( 3, 1, 2 );
+
+		var mshFloor = new THREE.Mesh( geoFloor, matFloor );
+		mshFloor.rotation.x = - Math.PI * 0.5;
+		var mshBox = new THREE.Mesh( geoBox, matBox );
+
+
+		var cyl = new THREE.CylinderBufferGeometry( 0.2, 3, 5, 24, 1, true);
+		//cyl.computeFaceNormals();
+		//cyl.computeVertexNormals();
+		var mc = new THREE.Mesh( cyl, matBox );
+		mc.position.set( 0, 2.5, 0 );
+
+		var ambient = new THREE.AmbientLight( 0x303030 );
+
+		view.load ( [ 'cone.sea'], init, true, true );
+
+		//init();
+
+		function init() {
+
+			cone = view.getGeometry('cone', 'Cone004')
+
+
+			renderer.shadowMap.enabled = true;
+			renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+			//renderer.gammaInput = true;
+			renderer.gammaOutput = true;
+			renderer.physicallyCorrectLights = true;
+
+			camera.position.set( 46, 22, - 21 );
+
+			matFloor.color.set( 0x808080 );
+
+			mshFloor.receiveShadow = true;
+			mshFloor.position.set( 0, - 0.05, 0 );
+
+			mshBox.castShadow = true;
+			mshBox.receiveShadow = true;
+			mshBox.position.set( 0, 5, 0 );
+
+			mc.castShadow = true;
+			mc.receiveShadow = true;
+
+			scene.add( mshFloor );
+			scene.add( mshBox );
+			scene.add( mc );
+			//scene.add( ambient );
+			
+			// add Light
+
+			var l, h;
+
+			for( var i = 0; i<n ; i++ ){
+
+				l = createSpotlight( randRange( 0x808080, 0xFFFFFF ) );
+				l.position.set(  randRange( -15, 15 ), randRange( 10, 40 ), randRange( -15, 15 ) );
+				h = new THREE.SpotLightHelper( l );
+				h.visible = false;
+				scene.add( l, l.target, h );
+
+				lights.push( l );
+				lightsHelper.push( h );
+
+			}
+
+			document.body.appendChild( renderer.domElement );
+			onResize();
+			window.addEventListener( 'resize', onResize, false );
+
+			controls.target.set( 0, 7, 0 );
+			controls.maxPolarAngle = Math.PI / 2;
+			controls.update();
+
+
+			initGUI();
+
+			render();
+			animate();
+
+		}
+
+		function createSpotlight( color ) {
+
+			var newObj = new THREE.SpotLight( color, 100 );
+
+			newObj.castShadow = true;
+			newObj.angle = 0.3;
+			newObj.penumbra = 0.2;
+			newObj.decay = 2;
+			newObj.distance = 50;
+
+			newObj.volumetric( cone );
+
+			return newObj;
+
+		}
+
+		function onResize() {
+
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+			renderer.setSize( window.innerWidth, window.innerHeight );
+
+		}
+
+		function tween( light ) {
+
+			var time = randRange( 1, 4 ) * 1000;
+
+			new TWEEN.Tween( light ).to( {
+				angle: randRange( 0.1, 0.8 ),
+				penumbra: randRange( 1, 2 ),
+			}, time )
+				.easing( TWEEN.Easing.Quadratic.Out ).start();
+
+			new TWEEN.Tween( light.position ).to( {
+				x:  randRange( -15, 15 ),
+				y:  randRange( 10, 15 ),
+				z:  randRange( -15, 15 )
+			}, time )
+				.easing( TWEEN.Easing.Quadratic.Out ).start();
+
+			new TWEEN.Tween( light.target.position ).to( {
+				x: randRange( -6, 6 ),
+				y: 0,
+				z: randRange( -6, 6 )
+			}, time )
+				.easing( TWEEN.Easing.Quadratic.Out ).start();
+
+		}
+
+		function animate() {
+
+			var i = n;
+			while(i--) tween( lights[i] );
+
+			setTimeout( animate, 5000 );
+
+		}
+
+		function render() {
+
+			TWEEN.update();
+
+			var i = n;
+			while(i--) lightsHelper[i].update();
+
+			renderer.render( scene, camera );
+
+			requestAnimationFrame( render );
+
+		}
+
+		
+		
+
+
+		function randRange( low, high ) { return low + Math.random() * ( high - low ); };
+
+
+
+		function initGUI() {
+
+			UIL.Tools.colors.backgroundOver = 'rgba(11,11,11,0)';
+
+			var hb = 14;
+		    var hc = '#929292';
+		    var tc = '#D4B87B';
+
+			var ui = new UIL.Gui( { w:200, bg:'rgba(23,23,23,0)' } );
+
+			ui.add( setting, 'anglePower', { min:0, max:10, fontColor:tc } ).onChange( setLights );
+			ui.add( setting, 'attenuation', { min:0, max:100, fontColor:tc } ).onChange( setLights );
+
+		}
+
+		function setLights() {
+			var i = n;
+			while(i--) lights[i].setVolumetric( setting );
+		}
+
+		</script>
+	</body>
+</html>
